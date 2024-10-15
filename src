@@ -1,49 +1,37 @@
-import os
 import tweepy
-from discord import Webhook, RequestsWebhookAdapter
-from flask import Flask
-from dotenv import load_dotenv
+import requests
 
-load_dotenv()  # Load environment variables from .env file
-
-app = Flask(__name__)
-
-# X (Twitter) API credentials
-consumer_key = os.getenv("CONSUMER_KEY")
-consumer_secret = os.getenv("CONSUMER_SECRET")
-access_token = os.getenv("ACCESS_TOKEN")
-access_token_secret = os.getenv("ACCESS_TOKEN_SECRET")
+# Twitter API credentials
+API_KEY = 'your_api_key'
+API_KEY_SECRET = 'your_api_key_secret'
+ACCESS_TOKEN = 'your_access_token'
+ACCESS_TOKEN_SECRET = 'your_access_token_secret'
 
 # Discord webhook URL
-discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
+DISCORD_WEBHOOK_URL = 'your_discord_webhook_url'
 
-# X (Twitter) User ID to follow
-x_user_id_to_follow = os.getenv("X_USER_ID_TO_FOLLOW")
-
-# Authenticate with X (Twitter)
-auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
-auth.set_access_token(access_token, access_token_secret)
+# Set up Twitter API authentication
+auth = tweepy.OAuth1UserHandler(API_KEY, API_KEY_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
 api = tweepy.API(auth)
 
-# Create Discord webhook
-discord_webhook = Webhook.from_url(discord_webhook_url, adapter=RequestsWebhookAdapter())
-
+# Create a stream listener
 class MyStreamListener(tweepy.StreamListener):
     def on_status(self, status):
-        # Process the post
-        post_url = f"https://x.com/{status.user.screen_name}/status/{status.id}"
-        message = f"New post from @{status.user.screen_name}:\n\n{status.text}\n\n{post_url}"
-        
-        # Send the post to Discord
-        discord_webhook.send(message)
+        # Prepare the message
+        message = f"New tweet from @{status.user.screen_name}: {status.text}"
+        print(message)  # Print to console for debugging
 
-# Set up the stream
+        # Send the message to Discord
+        requests.post(DISCORD_WEBHOOK_URL, json={"content": message})
+
+    def on_error(self, status_code):
+        if status_code == 420:
+            return False  # Disconnects the stream on rate limiting
+
+# Create and start the stream
 myStreamListener = MyStreamListener()
 myStream = tweepy.Stream(auth=api.auth, listener=myStreamListener)
 
-if __name__ == '__main__':
-    # Start the stream
-    myStream.filter(follow=[x_user_id_to_follow], is_async=True)
-    
-    # Start the Flask app (optional, for keeping the script running)
-    app.run(port=5000)
+# Filter the stream for specific keywords or user IDs (e.g., follow a specific user)
+myStream.filter(follow=['user_id_to_follow'], is_async=True)  # Use the numeric ID of the user
+
