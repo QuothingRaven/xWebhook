@@ -1,37 +1,58 @@
 import tweepy
 import requests
 
-# Twitter API credentials
-API_KEY = 'your_api_key'
-API_KEY_SECRET = 'your_api_key_secret'
-ACCESS_TOKEN = 'your_access_token'
-ACCESS_TOKEN_SECRET = 'your_access_token_secret'
+# X (formerly Twitter) API credentials
+bearer_token = 'YOUR_X_API_BEARER_TOKEN'
 
-# Discord webhook URL
-DISCORD_WEBHOOK_URL = 'your_discord_webhook_url'
+# Discord Webhook URL
+discord_webhook_url = 'YOUR_DISCORD_WEBHOOK_URL'
 
-# Set up Twitter API authentication
-auth = tweepy.OAuth1UserHandler(API_KEY, API_KEY_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
-api = tweepy.API(auth)
+# X account to track
+x_username = 'USERNAME_TO_TRACK'
 
-# Create a stream listener
-class MyStreamListener(tweepy.StreamListener):
-    def on_status(self, status):
-        # Prepare the message
-        message = f"New tweet from @{status.user.screen_name}: {status.text}"
-        print(message)  # Print to console for debugging
+# Tweepy client setup
+client = tweepy.Client(bearer_token=bearer_token)
 
-        # Send the message to Discord
-        requests.post(DISCORD_WEBHOOK_URL, json={"content": message})
+def post_to_discord(post):
+    post_url = f"https://x.com/{x_username}/status/{post['id']}"
+    message = f"New post by **{x_username}**: {post_url}"
+    
+    payload = {
+        "content": message
+    }
+    
+    response = requests.post(discord_webhook_url, json=payload)
+    
+    if response.status_code == 204:
+        print("Post shared to Discord successfully.")
+    else:
+        print(f"Failed to share post to Discord: {response.status_code}")
+
+class MyStreamListener(tweepy.StreamingClient):
+    def on_tweet(self, tweet):
+        print(f"New post from {x_username}: {tweet.text}")
+        post_to_discord(tweet.data)  # Send the post to Discord
 
     def on_error(self, status_code):
+        print(f"Error: {status_code}")
         if status_code == 420:
-            return False  # Disconnects the stream on rate limiting
+            # Rate limited; stop the stream
+            return False
 
-# Create and start the stream
-myStreamListener = MyStreamListener()
-myStream = tweepy.Stream(auth=api.auth, listener=myStreamListener)
+def main():
+    # Get the user ID to track
+    user = client.get_user(username=x_username)
+    user_id = user.data.id
+    
+    # Set up streaming listener
+    stream_listener = MyStreamListener(bearer_token)
+    
+    # Add rule to filter the stream for posts from the specific user
+    stream_listener.add_rules(tweepy.StreamRule(f"from:{user_id}"))
+    
+    # Start streaming
+    print(f"Starting stream for {x_username} (ID: {user_id})...")
+    stream_listener.filter(expansions="author_id")
 
-# Filter the stream for specific keywords or user IDs (e.g., follow a specific user)
-myStream.filter(follow=['user_id_to_follow'], is_async=True)  # Use the numeric ID of the user
-
+if __name__ == "__main__":
+    main()
