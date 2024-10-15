@@ -1,0 +1,49 @@
+import os
+import tweepy
+from discord import Webhook, RequestsWebhookAdapter
+from flask import Flask
+from dotenv import load_dotenv
+
+load_dotenv()  # Load environment variables from .env file
+
+app = Flask(__name__)
+
+# X (Twitter) API credentials
+consumer_key = os.getenv("CONSUMER_KEY")
+consumer_secret = os.getenv("CONSUMER_SECRET")
+access_token = os.getenv("ACCESS_TOKEN")
+access_token_secret = os.getenv("ACCESS_TOKEN_SECRET")
+
+# Discord webhook URL
+discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
+
+# X (Twitter) User ID to follow
+x_user_id_to_follow = os.getenv("X_USER_ID_TO_FOLLOW")
+
+# Authenticate with X (Twitter)
+auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
+auth.set_access_token(access_token, access_token_secret)
+api = tweepy.API(auth)
+
+# Create Discord webhook
+discord_webhook = Webhook.from_url(discord_webhook_url, adapter=RequestsWebhookAdapter())
+
+class MyStreamListener(tweepy.StreamListener):
+    def on_status(self, status):
+        # Process the post
+        post_url = f"https://x.com/{status.user.screen_name}/status/{status.id}"
+        message = f"New post from @{status.user.screen_name}:\n\n{status.text}\n\n{post_url}"
+        
+        # Send the post to Discord
+        discord_webhook.send(message)
+
+# Set up the stream
+myStreamListener = MyStreamListener()
+myStream = tweepy.Stream(auth=api.auth, listener=myStreamListener)
+
+if __name__ == '__main__':
+    # Start the stream
+    myStream.filter(follow=[x_user_id_to_follow], is_async=True)
+    
+    # Start the Flask app (optional, for keeping the script running)
+    app.run(port=5000)
