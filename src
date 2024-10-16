@@ -1,20 +1,11 @@
-import tweepy
 import requests
 import time
 
 # Twitter API credentials
-API_KEY = 'your_api_key'
-API_KEY_SECRET = 'your_api_key_secret'
-ACCESS_TOKEN = 'your_access_token'
-ACCESS_TOKEN_SECRET = 'your_access_token_secret'
+BEARER_TOKEN = 'your_bearer_token'  # Use bearer token for v2
 
 # Discord webhook URL
 DISCORD_WEBHOOK_URL = 'your_discord_webhook_url'
-
-# Set up Twitter API authentication
-auth = tweepy.OAuth1UserHandler(API_KEY, API_KEY_SECRET)
-auth.set_access_token(ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
-api = tweepy.API(auth)
 
 # Username to track
 username = 'target_username'  # Replace with the target username
@@ -22,25 +13,35 @@ username = 'target_username'  # Replace with the target username
 # Keep track of the latest tweet ID
 last_tweet_id = None
 
+def get_user_id(username):
+    url = f'https://api.twitter.com/2/users/by/username/{username}'
+    headers = {"Authorization": f"Bearer {BEARER_TOKEN}"}
+    response = requests.get(url, headers=headers)
+    return response.json()['data']['id']
+
+user_id = get_user_id(username)
+
 while True:
     try:
-        # Get the user's timeline
-        tweets = api.user_timeline(screen_name=username, count=5, tweet_mode='extended')
+        url = f'https://api.twitter.com/2/users/{user_id}/tweets'
+        headers = {"Authorization": f"Bearer {BEARER_TOKEN}"}
+        response = requests.get(url, headers=headers)
+        tweets = response.json().get('data', [])
 
         for tweet in tweets:
-            if last_tweet_id is None or tweet.id > last_tweet_id:
-                # Prepare the message
-                message = f"New tweet from @{tweet.user.screen_name}: {tweet.full_text}"
+            if last_tweet_id is None or tweet['id'] > last_tweet_id:
+                message = f"New tweet from @{username}: {tweet['text']}"
                 print(message)  # Print to console for debugging
 
                 # Send the message to Discord
                 requests.post(DISCORD_WEBHOOK_URL, json={"content": message})
 
                 # Update the last tweet ID
-                last_tweet_id = tweet.id
-        
-        time.sleep(60)  # Wait before checking again (e.g., every 60 seconds)
+                last_tweet_id = tweet['id']
+
+        time.sleep(60)  # Wait before checking again
 
     except Exception as e:
         print(f"An error occurred: {e}")
         time.sleep(60)  # Wait before retrying in case of error
+
