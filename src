@@ -1,70 +1,46 @@
 import tweepy
 import requests
+import time
 
-# X (formerly Twitter) API credentials
-api_key = 'YOUR_API_KEY'
-api_secret = 'YOUR_API_SECRET'
-access_token = 'YOUR_ACCESS_TOKEN'
-access_token_secret = 'YOUR_ACCESS_TOKEN_SECRET'
-bearer_token = 'YOUR_BEARER_TOKEN'  # Required for StreamingClient
+# Twitter API credentials
+API_KEY = 'your_api_key'
+API_KEY_SECRET = 'your_api_key_secret'
+ACCESS_TOKEN = 'your_access_token'
+ACCESS_TOKEN_SECRET = 'your_access_token_secret'
 
-# Discord Webhook URL
-discord_webhook_url = 'YOUR_DISCORD_WEBHOOK_URL'
+# Discord webhook URL
+DISCORD_WEBHOOK_URL = 'your_discord_webhook_url'
 
-# X account to track
-x_username = 'USERNAME_TO_TRACK'
-
-# OAuth1 Authentication for making API requests (not used for streaming)
-auth = tweepy.OAuth1UserHandler(
-    api_key,
-    api_secret,
-    access_token,
-    access_token_secret
-)
-
-# Set up Tweepy API client for non-streaming API requests
+# Set up Twitter API authentication
+auth = tweepy.OAuth1UserHandler(API_KEY, API_KEY_SECRET)
+auth.set_access_token(ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
 api = tweepy.API(auth)
 
-def post_to_discord(post):
-    post_url = f"https://x.com/{x_username}/status/{post['id']}"
-    message = f"New post by **{x_username}**: {post_url}"
-    
-    payload = {
-        "content": message
-    }
-    
-    response = requests.post(discord_webhook_url, json=payload)
-    
-    if response.status_code == 204:
-        print("Post shared to Discord successfully.")
-    else:
-        print(f"Failed to share post to Discord: {response.status_code}")
+# Username to track
+username = 'target_username'  # Replace with the target username
 
-class MyStream(tweepy.StreamingClient):
-    def on_tweet(self, tweet):
-        print(f"New post from {x_username}: {tweet.text}")
-        post_to_discord(tweet.data)  # Send the post to Discord
+# Keep track of the latest tweet ID
+last_tweet_id = None
 
-    def on_error(self, status_code):
-        print(f"Error: {status_code}")
-        if status_code == 420:
-            # Rate limited; stop the stream
-            return False
+while True:
+    try:
+        # Get the user's timeline
+        tweets = api.user_timeline(screen_name=username, count=5, tweet_mode='extended')
 
-def main():
-    # Get the user ID to track
-    user = api.get_user(screen_name=x_username)
-    user_id = user.id_str
-    
-    # Set up streaming listener
-    stream_listener = MyStream(bearer_token)
+        for tweet in tweets:
+            if last_tweet_id is None or tweet.id > last_tweet_id:
+                # Prepare the message
+                message = f"New tweet from @{tweet.user.screen_name}: {tweet.full_text}"
+                print(message)  # Print to console for debugging
 
-    # Add rule to filter the stream for posts from the specific user
-    stream_listener.add_rules(tweepy.StreamRule(f"from:{user_id}"))
-    
-    # Start streaming
-    print(f"Starting stream for {x_username} (ID: {user_id})...")
-    stream_listener.filter(expansions="author_id")
+                # Send the message to Discord
+                requests.post(DISCORD_WEBHOOK_URL, json={"content": message})
 
-if __name__ == "__main__":
-    main()
+                # Update the last tweet ID
+                last_tweet_id = tweet.id
+        
+        time.sleep(60)  # Wait before checking again (e.g., every 60 seconds)
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        time.sleep(60)  # Wait before retrying in case of error
